@@ -1,0 +1,150 @@
+/* src/components/layout/Sidebar.css */
+
+.sidebar {
+  position: fixed !important;
+  top: 0;
+  left: 0;
+  height: 100vh;
+  background: #1e293b !important;
+  color: white !important;
+  transition: width 0.3s ease;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 3px 0 12px rgba(0,0,0,0.45);
+}
+
+.sidebar.open {
+  width: 220px !important;
+}
+
+.sidebar.collapsed {
+  width: 64px !important;
+}
+
+/* HEADER */
+.sidebar-header {
+  padding: 16px 20px !important;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #334155;
+  min-height: 30px;
+}
+
+.sidebar-header h3 {
+  margin: 0;
+  font-size: 1.3rem;
+  font-weight: 600;
+}
+
+/* CONTENU PRINCIPAL */
+.sidebar-content {
+  flex: 1;
+  padding: 32px 24px !important;   /* ← plus de padding pour centrer */
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  overflow-y: auto;
+}
+
+.filter-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: -25px;
+}
+
+.filter-section label {
+  font-size: 0.98rem;
+  color: #cbd5e1;
+  font-weight: 500;
+  margin-bottom: 6px;
+}
+
+.filter-section input {
+  width: 95% !important;
+  padding: 5px 5px !important;
+  font-size: 1.05rem !important;
+  border: 1px solid #475569 !important;
+  border-radius: 8px !important;
+  background: #0f172a !important;
+  color: white !important;
+  margin-bottom: 16px !important;
+}
+
+.filter-section input:focus {
+  outline: none;
+  border-color: #60a5fa !important;
+  box-shadow: 0 0 0 3px rgba(96,165,250,0.25) !important;
+}
+
+.apply-btn {
+  width: 65% !important;
+  padding: 5px 5px !important;
+  background: #3b82f6 !important;
+  color: white !important;
+  border: none !important;
+  border-radius: 8px !important;
+  font-size: 1.05rem !important;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+  margin-top: -20px;
+  
+}
+
+.apply-btn:hover {
+  background: #2563eb !important;
+}
+
+/* Spacer pour pousser le bouton Admin en bas */
+.sidebar-spacer {
+  flex: 1;
+}
+
+/* Footer */
+.sidebar-footer {
+  margin-top: auto;
+  padding-top: 20px;
+}
+
+.admin-btn {
+  width: 100%;
+  padding: 12px;
+  background: #334155;
+  border: none;
+  border-radius: 8px;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.admin-btn:hover {
+  background: #475569;
+}
+
+/* Collapsed mode */
+.collapsed-icons {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 40px;
+  padding-top: 40px;
+}
+
+.icon-item {
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 12px;
+  border-radius: 10px;
+}
+
+.icon-item:hover {
+  background: #334155;
+  color: white;
+}
