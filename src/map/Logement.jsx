@@ -1,232 +1,388 @@
-// Logement.jsx
-import React, { useEffect, useState, useRef } from 'react';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
 
-import Sidebar from "../components/layout/Sidebar";
-import MapControls from '../components/fond/MapControls';
-import { BASEMAPS } from '../components/fond/Basemaps';
-
-import Chart from 'chart.js/auto';
-import ChartDataLabels from 'chartjs-plugin-datalabels';
-
-import "./Map.css";
+/*import { useEffect, useState } from "react";
+import { GeoJSON, useMap } from "react-leaflet";
+import L from "leaflet";
+import Chart from "chart.js/auto";
+import ChartDataLabels from "chartjs-plugin-datalabels";
 
 Chart.register(ChartDataLabels);
 
-// Correction icônes Leaflet
-delete L.Icon.Default.prototype._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: require('leaflet/dist/images/marker-icon-2x.png').default,
-  iconUrl: require('leaflet/dist/images/marker-icon.png').default,
-  shadowUrl: require('leaflet/dist/images/marker-shadow.png').default,
-});
+export default function Logement({ selectedTypes }) {
 
-const Logement = () => {
-  const mapRef = useRef(null);
-  const geoJsonLayerRef = useRef(null);
-  const pieMarkersGroupRef = useRef(null);
-  const initialized = useRef(false);
+  const map = useMap();
 
-  const [geoJsonData, setGeoJsonData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [selectedBasemap, setSelectedBasemap] = useState('osm');
+  const [data, setData] = useState(null);
+  const [pieLayer, setPieLayer] = useState(null);
+  const [legend, setLegend] = useState(null);
 
-  const [selectedTypes, setSelectedTypes] = useState([]);
-  const [maxTotal, setMaxTotal] = useState(null);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-
-  // ================= FETCH =================
+  // 🔥 Charger les données avec filtre backend
   useEffect(() => {
-    const fetchGeoJson = async () => {
-      setLoading(true);
-      setError(null);
 
-      try {
-        let url = 'http://localhost:8000/api/logement';
-        const params = new URLSearchParams();
-
-        if (selectedTypes.length > 0) params.append('types', selectedTypes.join(','));
-        if (maxTotal !== null && maxTotal > 0) params.append('max_population', maxTotal);
-
-        if (params.toString()) url += `?${params.toString()}`;
-        url += `${url.includes('?') ? '&' : '?'}__cb=${Date.now()}`;
-
-        const res = await fetch(url, { cache: 'no-store' });
-        if (!res.ok) throw new Error(await res.text());
-
-        const data = await res.json();
-        setGeoJsonData(data);
-      } catch (err) {
-        setError(err.message);
-      } finally {
-        setLoading(false);
-      }
+    const typesMap = {
+      location: "location1",
+      famille: "famille1",
+      colocation: "coloque",
+      cite: "cite"
     };
 
-    fetchGeoJson();
-  }, [selectedTypes, maxTotal]);
+    const typesQuery = selectedTypes
+      .map(t => typesMap[t])
+      .filter(Boolean)
+      .join(",");
 
-  // ================= INIT MAP =================
+    fetch(`http://localhost:8000/api/logement?types=${typesQuery}`)
+      .then(res => res.json())
+      .then(setData)
+      .catch(err => console.error(err));
+
+  }, [selectedTypes]);
+
+  // 🎨 Choropleth
+  const getColor = (d) => {
+    if (d >= 60) return "#800026";
+    if (d >= 40) return "#BD0026";
+    if (d >= 20) return "#E31A1C";
+    if (d >= 10) return "#FC4E2A";
+    if (d >= 5) return "#FD8D3C";
+    return "#FFEDA0";
+  };
+
+  const style = (feature) => {
+
+    const p = feature.properties || {};
+
+    const total =
+      (p.location_pct || 0) +
+      (p.famille_pct || 0) +
+      (p.coloque_pct || 0) +
+      (p.cite_pct || 0);
+
+    return {
+      fillColor: getColor(total),
+      weight: 1,
+      opacity: 1,
+      color: "white",
+      fillOpacity: 0.7
+    };
+  };
+
+  // 🔥 Légende camembert
   useEffect(() => {
-    if (initialized.current) return;
-    initialized.current = true;
 
-    const map = L.map('map').setView([-21.4536, 47.0857], 12);
+    if (!map) return;
 
-    L.tileLayer(BASEMAPS.osm.url, {
-      attribution: BASEMAPS.osm.attribution,
-    }).addTo(map);
+    if (legend) legend.remove();
 
-    mapRef.current = map;
-    return () => map.remove();
-  }, []);
+    const newLegend = L.control({ position: "bottomright" });
 
-  // ================= BASEMAP =================
+    newLegend.onAdd = function () {
+
+      const div = L.DomUtil.create("div", "info legend");
+
+      div.innerHTML = `
+      <h4>Type logement</h4>
+      <div><span style="background:#FF6384;width:12px;height:12px;display:inline-block;margin-right:5px;"></span>Location</div>
+      <div><span style="background:#36A2EB;width:12px;height:12px;display:inline-block;margin-right:5px;"></span>Famille</div>
+      <div><span style="background:#FFCE56;width:12px;height:12px;display:inline-block;margin-right:5px;"></span>Colocation</div>
+      <div><span style="background:#4BC0C0;width:12px;height:12px;display:inline-block;margin-right:5px;"></span>Cité</div>
+      `;
+
+      return div;
+    };
+
+    newLegend.addTo(map);
+    setLegend(newLegend);
+
+  }, [map]);
+
+  // 🔥 Camemberts
   useEffect(() => {
-    if (!mapRef.current) return;
-    const bm = BASEMAPS[selectedBasemap];
 
-    mapRef.current.eachLayer(layer => {
-      if (layer instanceof L.TileLayer) mapRef.current.removeLayer(layer);
-    });
+    if (!map || !data) return;
 
-    L.tileLayer(bm.url, { attribution: bm.attribution }).addTo(mapRef.current);
-  }, [selectedBasemap]);
+    if (pieLayer) map.removeLayer(pieLayer);
 
-  // ================= GEOJSON + PIE =================
-  useEffect(() => {
-    if (!mapRef.current) return;
+    const group = L.layerGroup().addTo(map);
 
-    if (geoJsonLayerRef.current) mapRef.current.removeLayer(geoJsonLayerRef.current);
+    data.features.forEach(feature => {
 
-    if (pieMarkersGroupRef.current) {
-      pieMarkersGroupRef.current.clearLayers();
-      mapRef.current.removeLayer(pieMarkersGroupRef.current);
-    }
+      const p = feature.properties;
+      if (!p) return;
 
-    if (!geoJsonData?.features?.length) return;
+      const values = {
+        location: p.location_pct || 0,
+        famille: p.famille_pct || 0,
+        colocation: p.coloque_pct || 0,
+        cite: p.cite_pct || 0
+      };
 
-    // ⭐ POLYGONES
-    geoJsonLayerRef.current = L.geoJSON(geoJsonData, {
-      style: (feature) => {
-        const v = feature.properties?.filter_match || 0;
-        return {
-          fillColor: v > 0 ? getColor(v) : "#d9d9d9",
-          weight: 2,
-          opacity: 1,
-          color: 'white',
-          dashArray: '3',
-          fillOpacity: v > 0 ? 0.7 : 0.25,
-        };
-      },
-
-      onEachFeature: (feature, layer) => {
-        const p = feature.properties || {};
-        layer.bindPopup(`<b>${p.fokontany || "Fokontany"}</b>`);
-      },
-    }).addTo(mapRef.current);
-
-    // ⭐ CAMEMBERTS
-    const pieGroup = L.layerGroup().addTo(mapRef.current);
-    pieMarkersGroupRef.current = pieGroup;
-
-    geoJsonData.features.forEach(feature => {
-      const p = feature.properties || {};
-      const match = p.filter_match || 0;
-      if (match <= 0) return;
-
-      let center;
-      try {
-        const temp = L.geoJSON(feature);
-        center = temp.getBounds().getCenter();
-      } catch (e) { return; }
-
-      const values = [
-        p.location_pct || 0,
-        p.famille_pct || 0,
-        p.coloque_pct || 0,
-        p.cite_pct || 0,
+      const dataset = [
+        values.location,
+        values.famille,
+        values.colocation,
+        values.cite
       ];
 
-      const canvas = document.createElement('canvas');
+      const total = dataset.reduce((a,b)=>a+b,0);
+      if(total === 0) return;
+
+      const center = L.geoJSON(feature).getBounds().getCenter();
+
+      const canvas = document.createElement("canvas");
       canvas.width = 80;
       canvas.height = 80;
 
       new Chart(canvas, {
-        type: 'pie',
+        type: "pie",
         data: {
-          labels: ['Location', 'Famille', 'Colocation', 'Cité'],
+          labels: ["Location", "Famille", "Colocation", "Cité"],
           datasets: [{
-            data: values,
-            backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0'],
-            borderColor: '#fff',
-            borderWidth: 1.5,
+            data: dataset,
+            backgroundColor: [
+              "#FF6384",
+              "#36A2EB",
+              "#FFCE56",
+              "#4BC0C0"
+            ]
           }]
         },
         options: {
           responsive: false,
           plugins: {
-            legend: { display: false },
-            tooltip: { enabled: false },
-            datalabels: {
-              color: '#fff',
-              font: { weight: 'bold', size: 10 },
-              formatter: (value) => value === 0 ? '' : value.toFixed(0) + '%'
+            legend: { display:false },
+            datalabels:{
+              color:"#fff",
+              font:{weight:"bold",size:10},
+              formatter:(value)=> value > 5 ? value.toFixed(0)+"%" : ""
             }
           }
-        }
+        },
+        plugins:[ChartDataLabels]
       });
 
-      const pieIcon = L.divIcon({
-        html: canvas,
-        className: 'leaflet-pie-chart-icon',
-        iconSize: [80, 80],
-        iconAnchor: [40, 40],
+      const marker = L.marker(center,{
+        icon:L.divIcon({
+          html:canvas,
+          className:"",
+          iconSize:[80,80],
+          iconAnchor:[40,40]
+        })
       });
 
-      pieGroup.addLayer(L.marker(center, { icon: pieIcon }));
+      group.addLayer(marker);
+
     });
 
-    const bounds = geoJsonLayerRef.current.getBounds();
-    if (bounds.isValid()) mapRef.current.fitBounds(bounds, { padding: [60, 60] });
+    setPieLayer(group);
 
-  }, [geoJsonData]);
+  },[data,map]);
 
-  const getColor = (value) => {
-    return value > 20 ? '#800026' :
-           value > 10 ? '#BD0026' :
-           value > 5  ? '#E31A1C' :
-           value > 2  ? '#FC4E2A' :
-           value > 0  ? '#FD8D3C' :
-                        '#FFEDA0';
-  };
+  if(!data) return null;
 
   return (
-    <div style={{ height: '100vh', width: '100%', display: 'flex' }}>
-      <Sidebar
-        isOpen={isSidebarOpen}
-        setIsOpen={setIsSidebarOpen}
-        maxTotal={maxTotal}
-        setMaxTotal={setMaxTotal}
-        selectedTypes={selectedTypes}
-        setSelectedTypes={setSelectedTypes}
-      />
-
-      <div style={{ flex: 1, position: 'relative' }}>
-        <div id="map" style={{ height: '100%', width: '100%' }} />
-
-        {loading && <div className="loading-overlay">Chargement...</div>}
-        {error && <div className="error-overlay">Erreur : {error}</div>}
-
-        <MapControls
-          selectedBasemap={selectedBasemap}
-          onBasemapChange={setSelectedBasemap}
-        />
-      </div>
-    </div>
+    <GeoJSON
+      key={JSON.stringify(selectedTypes)}
+      data={data}
+      style={style}
+    />
   );
-};
+}*/
 
-export default Logement;
+import { useEffect, useState } from "react";
+import { GeoJSON, useMap } from "react-leaflet";
+import L from "leaflet";
+import Chart from "chart.js/auto";
+import ChartDataLabels from "chartjs-plugin-datalabels";
+
+Chart.register(ChartDataLabels);
+
+export default function Logement({ selectedTypes }) {
+
+  const map = useMap();
+
+  const [data, setData] = useState(null);
+  const [pieLayer, setPieLayer] = useState(null);
+  const [legend, setLegend] = useState(null);
+
+  // Charger les données avec filtre backend
+  useEffect(() => {
+
+    if (!selectedTypes || selectedTypes.length === 0) {
+      setData(null);
+      return;
+    }
+
+    const typesMap = {
+      location: "location1",
+      famille: "famille1",
+      colocation: "coloque",
+      cite: "cite"
+    };
+
+    const typesQuery = selectedTypes
+      .map(t => typesMap[t])
+      .filter(Boolean)
+      .join(",");
+
+    fetch(`http://localhost:8000/api/logement?types=${typesQuery}`)
+      .then(res => res.json())
+      .then(setData)
+      .catch(err => console.error(err));
+
+  }, [selectedTypes]);
+
+  // Couleur choroplèthe
+  const getColor = (d) => {
+    if (d >= 20) return "#800026";
+    if (d >= 5) return "#BD0026";
+    if (d >= 3) return "#E31A1C";
+    if (d >= 2) return "#FC4E2A";
+    if (d >= 1) return "#FD8D3C";
+    return "#FFEDA0";
+  };
+
+  const style = (feature) => {
+
+    const p = feature.properties || {};
+
+    const total =
+      (p.location_pct || 0) +
+      (p.famille_pct || 0) +
+      (p.coloque_pct || 0) +
+      (p.cite_pct || 0);
+
+    return {
+      fillColor: getColor(total),
+      weight: 1,
+      opacity: 1,
+      color: "white",
+      fillOpacity: 0.7
+    };
+  };
+
+  // Légende
+  useEffect(() => {
+
+    if (!map) return;
+
+    if (legend) legend.remove();
+
+    const newLegend = L.control({ position: "bottomright" });
+
+    newLegend.onAdd = function () {
+
+      const div = L.DomUtil.create("div", "info legend");
+
+      div.innerHTML = `
+      <h4>Type logement</h4>
+      <div><span style="background:#FF6384;width:12px;height:12px;display:inline-block;margin-right:5px;"></span>Location</div>
+      <div><span style="background:#36A2EB;width:12px;height:12px;display:inline-block;margin-right:5px;"></span>Famille</div>
+      <div><span style="background:#FFCE56;width:12px;height:12px;display:inline-block;margin-right:5px;"></span>Colocation</div>
+      <div><span style="background:#4BC0C0;width:12px;height:12px;display:inline-block;margin-right:5px;"></span>Cité</div>
+      `;
+
+      return div;
+    };
+
+    newLegend.addTo(map);
+    setLegend(newLegend);
+
+  }, [map]);
+
+  // Camemberts
+  useEffect(() => {
+
+    if (!map || !data) return;
+
+    if (pieLayer) map.removeLayer(pieLayer);
+
+    if (!selectedTypes || selectedTypes.length === 0) return;
+
+    const group = L.layerGroup().addTo(map);
+
+    data.features.forEach(feature => {
+
+      const p = feature.properties;
+      if (!p) return;
+
+      const values = {
+        location: p.location_pct || 0,
+        famille: p.famille_pct || 0,
+        colocation: p.coloque_pct || 0,
+        cite: p.cite_pct || 0
+      };
+
+      const dataset = [
+        selectedTypes.includes("location") ? values.location : 0,
+        selectedTypes.includes("famille") ? values.famille : 0,
+        selectedTypes.includes("colocation") ? values.colocation : 0,
+        selectedTypes.includes("cite") ? values.cite : 0
+      ];
+
+      const total = dataset.reduce((a,b)=>a+b,0);
+
+      if(total === 0) return;
+
+      const center = L.geoJSON(feature).getBounds().getCenter();
+
+      const canvas = document.createElement("canvas");
+      canvas.width = 80;
+      canvas.height = 80;
+
+      new Chart(canvas,{
+        type:"pie",
+        data:{
+          labels:["Location","Famille","Colocation","Cité"],
+          datasets:[{
+            data:dataset,
+            backgroundColor:[
+              "#FF6384",
+              "#36A2EB",
+              "#FFCE56",
+              "#4BC0C0"
+            ]
+          }]
+        },
+        options:{
+          responsive:false,
+          plugins:{
+            legend:{display:false},
+            datalabels:{
+              color:"#fff",
+              font:{weight:"bold",size:10},
+              formatter:(value)=> value > 5 ? value.toFixed(0)+"%" : ""
+            }
+          }
+        },
+        plugins:[ChartDataLabels]
+      });
+
+      const marker = L.marker(center,{
+        icon:L.divIcon({
+          html:canvas,
+          className:"",
+          iconSize:[80,80],
+          iconAnchor:[40,40]
+        })
+      });
+
+      marker.bindPopup(`<b>${p.fokontany}</b>`);
+
+      group.addLayer(marker);
+
+    });
+
+    setPieLayer(group);
+
+  },[data,map,selectedTypes]);
+
+  if(!data) return null;
+
+  return (
+    <GeoJSON
+      key={JSON.stringify(selectedTypes)}
+      data={data}
+      style={style}
+    />
+  );
+}

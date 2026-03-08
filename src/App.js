@@ -1,42 +1,47 @@
-
-/*import './App.css';
-import Map from './map/Map';
-
+import React, { useState } from "react";
+import Sidebar from "./Sidebar.jsx";
+import MapView from "./MapView";
 
 
 
 function App() {
-  return (
-    <div className="App">
-     
-     
-      <Map />
-     
-    
 
+  // 🔥 Filtre maxTotal
+  const [maxTotal, setMaxTotal] = useState("");
+
+  // 🔥 Types sélectionnés pour camembert
+  const [selectedTypes, setSelectedTypes] = useState([]);
+
+  return (
+    <div style={{ display: "flex" }}>
+
+      <Sidebar
+        maxTotal={maxTotal}
+        setMaxTotal={setMaxTotal}
+        selectedTypes={selectedTypes}
+        setSelectedTypes={setSelectedTypes}
+      />
+
+      <div style={{ flexGrow: 1 }}>
+
+        <MapView
+          
+          maxTotal={maxTotal}
+          selectedTypes={selectedTypes}
+        />
+
+        {/* Si tu veux afficher les 2 composants directement */}
+        {/* 
+        <Map maxTotal={maxTotal} />
+        <Logement
+          maxTotal={maxTotal}
+          selectedTypes={selectedTypes}
+        />
+        */}
+
+      </div>
     </div>
-    
-
-  );
-}
-
-export default App;*/
-import "./App.css";
-import Map from "./map/Map";
-import Logement from "./map/Logement";
-
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-
-function App() {
-  return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<Map />} />
-        <Route path="/logement" element={<Logement />} />
-      </Routes>
-    </BrowserRouter>
   );
 }
 
 export default App;
-
