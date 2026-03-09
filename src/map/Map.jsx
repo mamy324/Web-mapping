@@ -1,7 +1,11 @@
+
+
 import { useEffect, useState } from "react";
-import { GeoJSON } from "react-leaflet";
+import { GeoJSON, useMap } from "react-leaflet";
+import L from "leaflet";
 
 import "./Map.css";
+
 
 const API_URL = "http://localhost:8000/api/countries";
 
@@ -48,7 +52,6 @@ export default function Map({ maxTotal }) {
       .catch(err => console.error(err));
   };
 
-  // 🔥 Filtre automatique conservé
   useEffect(() => {
     const delay = setTimeout(() => {
       fetchData();
@@ -121,27 +124,20 @@ export default function Map({ maxTotal }) {
   if (!data) return null;
 
   return (
-    <>
+   
       <GeoJSON
         key={JSON.stringify(data)}
         data={data}
         style={geoStyle}
         onEachFeature={onEachFeature}
-      />
-
-      {/* 📊 Légende 
-      <div className="legend-container">
-        <div className="legend">
-          <h4>Population Etudiantes</h4>
-          <div className="legend-item"><span style={{ backgroundColor: "#800026" }}></span> &gt;2000</div>
-          <div className="legend-item"><span style={{ backgroundColor: "#BD0026" }}></span> 1001 – 2000</div>
-          <div className="legend-item"><span style={{ backgroundColor: "#E31A1C" }}></span> 151 – 1000</div>
-          <div className="legend-item"><span style={{ backgroundColor: "#FC4E2A" }}></span> 51 – 150</div>
-          <div className="legend-item"><span style={{ backgroundColor: "#FD8D3C" }}></span> 1 – 50</div>
-          <div className="legend-item"><span style={{ backgroundColor: "#FFEDA0" }}></span> ≤ 0</div>
-        </div>
-      </div>
-      */}
-    </>
+      />    
+    
   );
 }
+
+
+
+
+
+
+

@@ -15,18 +15,16 @@ import {
   TextField
 } from "@mui/material";
 
-import SecurityIcon from "@mui/icons-material/Security";
+import SecurityIcon from '@mui/icons-material/Security';
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import ExpandLess from "@mui/icons-material/ExpandLess";
 import ExpandMore from "@mui/icons-material/ExpandMore";
 import ApartmentIcon from "@mui/icons-material/Apartment";
-import PaidIcon from "@mui/icons-material/Paid";
-import WaterDropIcon from "@mui/icons-material/WaterDrop";
-import ElectricBoltIcon from "@mui/icons-material/ElectricBolt";
-import MonetizationOnIcon from "@mui/icons-material/MonetizationOn";
+import PaidIcon from '@mui/icons-material/Paid';
+import WaterDropIcon from '@mui/icons-material/WaterDrop';
+import ElectricBoltIcon from '@mui/icons-material/ElectricBolt';
+import MonetizationOnIcon from '@mui/icons-material/MonetizationOn';
 import MenuIcon from "@mui/icons-material/Menu";
-
-import { Link } from "react-router-dom";
 
 const drawerWidth = 240;
 
@@ -51,6 +49,7 @@ export default function Sidebar({
     }));
   };
 
+  // Synchronisation maxTotal <-> input
   useEffect(() => {
     if (maxTotal !== undefined) {
       setFilterText(maxTotal);
@@ -58,7 +57,6 @@ export default function Sidebar({
   }, [maxTotal]);
 
   const handleCheck = (menu, sub) => {
-
     const key = `${menu}-${sub}`;
 
     setCheckedItems((prev) => ({
@@ -66,63 +64,44 @@ export default function Sidebar({
       [key]: !prev[key],
     }));
 
-    // filtre camembert logement
+    // 🔥 TYPE DE LOGEMENT → CAMEMBERT
     if (menu === "Type de logement") {
+      const value = sub.toLowerCase();
 
-      let value = sub.toLowerCase();
-
-      if (value === "parents/famille") value = "famille";
-
-      setSelectedTypes((prev) =>
+      setSelectedTypes(prev =>
         prev.includes(value)
-          ? prev.filter((t) => t !== value)
+          ? prev.filter(t => t !== value)
           : [...prev, value]
       );
     }
   };
 
   const menuItems = [
-
-    // 🔥 NAVIGATION CARTES
-    {
-      text: "Cartes",
-      icon: <ApartmentIcon />,
-      links: [
-        { label: "Population étudiante", path: "/population" },
-        { label: "Logement étudiant", path: "/logement" }
-      ]
-    },
-
     {
       text: "Type de logement",
       icon: <ApartmentIcon />,
       subMenus: ["Location", "Colocation", "Parents/Famille", "Cité"],
     },
-
     {
       text: "Coût Logement",
       icon: <MonetizationOnIcon />,
       subMenus: ["Afficher carte", "Mes localisations", "Mesure distance", "Imprimer"],
     },
-
     {
       text: "Sécurité",
       icon: <SecurityIcon />,
       subMenus: ["Routes", "Bâtiments", "Rivières", "Points d'intérêt"],
     },
-
     {
       text: "Eau",
       icon: <WaterDropIcon />,
       subMenus: ["Profil", "Préférences", "Sécurité", "Notifications"],
     },
-
     {
       text: "Electricité",
       icon: <ElectricBoltIcon />,
       subMenus: ["Profil", "Préférences", "Sécurité", "Notifications"],
     },
-
     {
       text: "Coût",
       icon: <PaidIcon />,
@@ -131,7 +110,6 @@ export default function Sidebar({
   ];
 
   const filterSubMenus = (subMenus) => {
-    if (!subMenus) return [];
     return subMenus.filter((sub) =>
       sub.toLowerCase().includes(filterText.toLowerCase())
     );
@@ -154,7 +132,6 @@ export default function Sidebar({
           },
         }}
       >
-
         {/* HEADER */}
         <Box
           sx={{
@@ -177,7 +154,7 @@ export default function Sidebar({
 
         <Divider sx={{ backgroundColor: "#334155" }} />
 
-        {/* FILTRE POPULATION */}
+        {/* 🔥 FILTRE MAX TOTAL */}
         {open && (
           <Box sx={{ p: 1 }}>
             <TextField
@@ -201,24 +178,21 @@ export default function Sidebar({
           </Box>
         )}
 
+        {/* MENU COMPLET (inchangé) */}
         <List>
-
           {menuItems.map((item, index) => {
-
             const filteredSubs = filterSubMenus(item.subMenus);
 
             return (
               <Box key={index}>
-
                 <ListItem disablePadding>
-
                   <ListItemButton
                     onClick={() => handleToggleMenu(item.text)}
                     sx={{
+                      cursor: "pointer",
                       "&:hover": { backgroundColor: "#334155" },
                     }}
                   >
-
                     <ListItemIcon sx={{ color: "#cbd5e1" }}>
                       {item.icon}
                     </ListItemIcon>
@@ -227,47 +201,24 @@ export default function Sidebar({
 
                     {open &&
                       (openMenus[item.text] ? <ExpandLess /> : <ExpandMore />)}
-
                   </ListItemButton>
-
                 </ListItem>
 
                 <Collapse in={openMenus[item.text]} timeout="auto" unmountOnExit>
-
                   <List component="div" disablePadding>
-
-                    {/* 🔥 LIENS NAVIGATION */}
-                    {item.links && item.links.map((link, i) => (
-
-                      <ListItem key={i} disablePadding>
-
-                        <ListItemButton
-                          component={Link}
-                          to={link.path}
-                          sx={{ pl: 6 }}
-                        >
-
-                          <ListItemText primary={link.label} />
-
-                        </ListItemButton>
-
-                      </ListItem>
-
-                    ))}
-
-                    {/* CHECKBOX */}
                     {filteredSubs.map((sub, i) => {
-
                       const key = `${item.text}-${sub}`;
 
                       return (
                         <ListItem key={i} disablePadding>
-
                           <ListItemButton
                             onClick={() => handleCheck(item.text, sub)}
-                            sx={{ pl: 6 }}
+                            sx={{
+                              pl: 6,
+                              cursor: "pointer",
+                              "&:hover": { backgroundColor: "#475569" },
+                            }}
                           >
-
                             <Checkbox
                               checked={checkedItems[key] || false}
                               sx={{
@@ -275,23 +226,16 @@ export default function Sidebar({
                                 "&.Mui-checked": { color: "#38bdf8" },
                               }}
                             />
-
                             <ListItemText primary={sub} />
-
                           </ListItemButton>
-
                         </ListItem>
                       );
                     })}
-
                   </List>
-
                 </Collapse>
-
               </Box>
             );
           })}
-
         </List>
       </Drawer>
     </Box>

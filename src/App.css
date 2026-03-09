@@ -36,3 +36,33 @@
     transform: rotate(360deg);
   }
 }
+
+
+
+.legend-container{
+  position:absolute;
+  bottom:20px;
+  right:20px;
+  z-index:1000;
+}
+
+.legend{
+  background:white;
+  padding:10px;
+  border-radius:6px;
+  font-size:14px;
+  box-shadow:0 0 5px rgba(0,0,0,0.3);
+}
+
+.legend-item{
+  display:flex;
+  align-items:center;
+  margin-bottom:4px;
+}
+
+.legend-item span{
+  width:15px;
+  height:15px;
+  display:inline-block;
+  margin-right:6px;
+}

@@ -1,46 +1,49 @@
 import React, { useState } from "react";
-import Sidebar from "./Sidebar.jsx";
-import MapView from "./MapView";
+import Sidebar from "./Sidebar";
 
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 
+import CartePopulation from "./pages/CartePopulation";
+import CarteLogement from "./pages/CarteLogement";
 
 function App() {
 
-  // 🔥 Filtre maxTotal
   const [maxTotal, setMaxTotal] = useState("");
-
-  // 🔥 Types sélectionnés pour camembert
   const [selectedTypes, setSelectedTypes] = useState([]);
 
   return (
-    <div style={{ display: "flex" }}>
+    <Router>
 
-      <Sidebar
-        maxTotal={maxTotal}
-        setMaxTotal={setMaxTotal}
-        selectedTypes={selectedTypes}
-        setSelectedTypes={setSelectedTypes}
-      />
+      <div style={{ display: "flex" }}>
 
-      <div style={{ flexGrow: 1 }}>
-
-        <MapView
-          
+        <Sidebar
           maxTotal={maxTotal}
+          setMaxTotal={setMaxTotal}
           selectedTypes={selectedTypes}
+          setSelectedTypes={setSelectedTypes}
         />
 
-        {/* Si tu veux afficher les 2 composants directement */}
-        {/* 
-        <Map maxTotal={maxTotal} />
-        <Logement
-          maxTotal={maxTotal}
-          selectedTypes={selectedTypes}
-        />
-        */}
+        <div style={{ flexGrow: 1 }}>
+
+          <Routes>
+
+            <Route
+              path="/population"
+              element={<CartePopulation maxTotal={maxTotal} />}
+            />
+
+            <Route
+              path="/logement"
+              element={<CarteLogement selectedTypes={selectedTypes} />}
+            />
+
+          </Routes>
+
+        </div>
 
       </div>
-    </div>
+
+    </Router>
   );
 }
 
