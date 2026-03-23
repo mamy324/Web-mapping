@@ -1,387 +1,341 @@
-// Logement.jsx
-import React, { useEffect, useState, useRef } from 'react';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
+import { useEffect, useState, useRef } from "react";
+import { MapContainer, TileLayer, GeoJSON, LayersControl, useMap } from "react-leaflet";
+import L from "leaflet";
 
-import Sidebar from "../components/layout/Sidebar";
-import MapControls from '../components/fond/MapControls';
-import { BASEMAPS } from '../components/fond/Basemaps';
+import "leaflet-fullscreen/dist/leaflet.fullscreen.css";
+import "leaflet-fullscreen";
 
-import Chart from 'chart.js/auto';
-import ChartDataLabels from 'chartjs-plugin-datalabels';
+import Chart from "chart.js/auto";
+import ChartDataLabels from "chartjs-plugin-datalabels";
 
-// Enregistrement global du plugin datalabels (une seule fois)
 Chart.register(ChartDataLabels);
 
+const API_URL = "http://localhost:8000/api/securite";
+const { BaseLayer } = LayersControl;
 
 
-// Correction icônes par défaut Leaflet
-delete L.Icon.Default.prototype._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: require('leaflet/dist/images/marker-icon-2x.png').default,
-  iconUrl: require('leaflet/dist/images/marker-icon.png').default,
-  shadowUrl: require('leaflet/dist/images/marker-shadow.png').default,
-});
+/* ================= CONTROLES ================= */
 
-const Logement = () => {
-  const mapRef = useRef(null);
-  const geoJsonLayerRef = useRef(null);
-  const pieMarkersGroupRef = useRef(null);
-  const initialized = useRef(false);
+function MapControls() {
 
-  const [geoJsonData, setGeoJsonData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [selectedBasemap, setSelectedBasemap] = useState('osm');
+  const map = useMap();
+  const controlsAdded = useRef(false);
 
-  const [selectedTypes, setSelectedTypes] = useState([]);
-  const [maxTotal, setMaxTotal] = useState(null);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-
-  // Fetch des données
   useEffect(() => {
-    const fetchGeoJson = async () => {
-      setLoading(true);
-      setError(null);
 
-      try {
-        let url = 'http://localhost:8000/api/logement';
+    if (controlsAdded.current) return;
 
-        const params = new URLSearchParams();
-        if (selectedTypes.length > 0) {
-          params.append('types', selectedTypes.join(','));
-        }
-        if (maxTotal !== null && maxTotal > 0) {
-          params.append('max_population', maxTotal);
-        }
+    L.control.fullscreen({
+      position: "topleft"
+    }).addTo(map);
 
-        if (params.toString()) url += `?${params.toString()}`;
+    L.control.scale({
+      metric: true,
+      imperial: false,
+      position: "bottomleft"
+    }).addTo(map);
 
-        url += `${url.includes('?') ? '&' : '?'}__cb=${Date.now()}`;
+    controlsAdded.current = true;
 
-        console.log("[FETCH] URL:", url);
+  }, [map]);
 
-        const response = await fetch(url, {
-          cache: 'no-store',
-          headers: { 'Cache-Control': 'no-cache' },
-        });
+  return null;
+}
 
-        if (!response.ok) {
-          const text = await response.text().catch(() => '');
-          throw new Error(`Erreur HTTP ${response.status} - ${text.substring(0, 100)}...`);
-        }
 
-        const data = await response.json();
-        console.log("[FETCH] Données reçues :", data);
-        setGeoJsonData(data);
-      } catch (err) {
-        console.error("[FETCH] Erreur:", err);
-        setError(err.message || 'Impossible de charger les données');
-      } finally {
-        setLoading(false);
-      }
+/* ================= LEGENDE ================= */
+
+function Legend() {
+
+  const map = useMap();
+  const legendAdded = useRef(false);
+
+  useEffect(() => {
+
+    if (legendAdded.current) return;
+
+    const legend = L.control({ position: "bottomright" });
+
+    legend.onAdd = function () {
+
+      const div = L.DomUtil.create("div");
+
+      div.style.background = "#1e293b";
+      div.style.padding = "10px";
+      div.style.borderRadius = "8px";
+      div.style.color = "white";
+
+      div.innerHTML = `
+      <b>Sécurité</b><br><br>
+
+      <div>
+      <span style="background:#16a34a;width:12px;height:12px;display:inline-block;margin-right:6px;"></span>
+      Sécurisé
+      </div>
+
+      <div>
+      <span style="background:#facc15;width:12px;height:12px;display:inline-block;margin-right:6px;"></span>
+      Sécurité moyenne
+      </div>
+
+      <div>
+      <span style="background:#dc2626;width:12px;height:12px;display:inline-block;margin-right:6px;"></span>
+      Peu sécurisé
+      </div>
+      `;
+
+      return div;
     };
 
-    fetchGeoJson();
-  }, [selectedTypes, maxTotal]);
+    legend.addTo(map);
+    legendAdded.current = true;
 
-  // Initialisation de la carte (corrigée pour éviter appendChild undefined)
+  }, [map]);
+
+  return null;
+}
+
+
+/* ================= COUCHE SECURITE ================= */
+
+function SecuriteLayer({ selectedTypes }) {
+
+  const map = useMap();
+  const [data, setData] = useState(null);
+
+  const pieLayerRef = useRef(null);
+  const chartsRef = useRef({});
+
+
+  /* ===== charger données ===== */
+
   useEffect(() => {
-    if (initialized.current) return;
-    initialized.current = true;
 
-    const container = document.getElementById('map');
-    if (!container) {
-      console.error("[LEAFLET] Conteneur #map introuvable");
-      return;
-    }
+    fetch(API_URL)
+      .then(res => res.json())
+      .then(json => {
 
-    try {
-      const map = L.map('map', { zoomControl: false })
-        .setView([-21.4536, 47.0857], 12);
+        console.log("DATA API securite :", json);
 
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap',
-        maxZoom: 19,
-      }).addTo(map);
+        setData(json);
 
-      mapRef.current = map;
+      });
 
-      // Rafraîchissement obligatoire en React
-      setTimeout(() => {
-        if (mapRef.current) {
-          mapRef.current.invalidateSize();
-          console.log("[LEAFLET] Carte rafraîchie (invalidateSize)");
-        }
-      }, 300);
-
-    } catch (err) {
-      console.error("[LEAFLET] Erreur init :", err);
-    }
-
-    return () => {
-      if (mapRef.current) {
-        console.log("[LEAFLET] Destruction carte...");
-        mapRef.current.remove();
-        mapRef.current = null;
-      }
-      initialized.current = false;
-    };
   }, []);
 
-  // Changement fond de carte
+
+  /* ===== choroplèthe ===== */
+
+  function getColor(d) {
+
+    return d > 10 ? "#800026" :
+           d > 5 ? "#BD0026" :
+           d > 3 ? "#E31A1C" :
+           d > 2 ? "#FC4E2A" :
+           d >= 1 ? "#FD8D3C" :
+                    "#FFEDA0";
+  }
+
+  function style(feature) {
+
+    const total = Number(feature.properties?.total1 || 0);
+
+    return {
+      fillColor: getColor(total),
+      weight: 1,
+      color: "white",
+      fillOpacity: 0.7
+    };
+  }
+
+
+  function onEachFeature(feature, layer) {
+
+    const p = feature.properties || {};
+
+    const popupContent = `
+      <b>Fokontany :</b> ${p.fokontany || "N/A"}<br/>
+      <b>Total logements :</b> ${p.total1 || 0}<br/><br/>
+
+      <b>Sécurité :</b><br/>
+      Sécurisé : ${(Number(p.securite_pct)||0).toFixed(2)} %<br/>
+      Sécurité moyenne : ${(Number(p.moyennesec_pct)||0).toFixed(2)} %<br/>
+      Peu sécurisé : ${(Number(p.peusecu_pct)||0).toFixed(2)} %
+    `;
+
+    layer.bindPopup(popupContent);
+
+  }
+
+
+  /* ================= CAMEMBERTS ================= */
+
   useEffect(() => {
-    if (!mapRef.current) return;
-    const bm = BASEMAPS[selectedBasemap];
-    if (!bm?.url) return;
 
-    mapRef.current.eachLayer(layer => {
-      if (layer instanceof L.TileLayer) {
-        mapRef.current.removeLayer(layer);
-      }
-    });
+    if (!map || !data) return;
 
-    L.tileLayer(bm.url, {
-      attribution: bm.attribution || '',
-      maxZoom: bm.maxZoom || 19,
-    }).addTo(mapRef.current);
-  }, [selectedBasemap]);
+    if (pieLayerRef.current) {
 
-  // Polygones + camemberts au centre avec % à l’intérieur
-  useEffect(() => {
-    if (!mapRef.current) return;
+      pieLayerRef.current.clearLayers();
+      map.removeLayer(pieLayerRef.current);
 
-    // Nettoyage
-    if (geoJsonLayerRef.current) {
-      mapRef.current.removeLayer(geoJsonLayerRef.current);
-      geoJsonLayerRef.current = null;
     }
 
-    if (pieMarkersGroupRef.current) {
-      pieMarkersGroupRef.current.clearLayers();
-      mapRef.current.removeLayer(pieMarkersGroupRef.current);
-      pieMarkersGroupRef.current = null;
-    }
+    const group = L.layerGroup().addTo(map);
 
-    if (!geoJsonData?.features?.length) {
-      console.log("[GEOJSON] Pas de features");
-      return;
-    }
 
-    console.log("[GEOJSON] Ajout de", geoJsonData.features.length, "polygones");
+    data.features.forEach(feature => {
 
-    // Couche polygones
-    geoJsonLayerRef.current = L.geoJSON(geoJsonData, {
-      style: (feature) => ({
-        fillColor: getColor(feature.properties?.filter_match || 0),
-        weight: 2,
-        opacity: 1,
-        color: 'white',
-        dashArray: '3',
-        fillOpacity: 0.7,
-      }),
-      onEachFeature: (feature, layer) => {
-        const p = feature.properties;
-        if (p && p.fokontany) {
-          layer.bindPopup(`
-            <b>${p.fokontany}</b><br/>
-            Location: ${p.location_pct?.toFixed(1) || 0}%<br/>
-            Famille: ${p.famille_pct?.toFixed(1) || 0}%<br/>
-            Colocation: ${p.coloque_pct?.toFixed(1) || 0}%<br/>
-            Cité: ${p.cite_pct?.toFixed(1) || 0}%
-          `);
-        }
-      },
-    }).addTo(mapRef.current);
+      if (!feature.geometry) return;
 
-    // Camemberts au centre
-    const pieGroup = L.layerGroup().addTo(mapRef.current);
-    pieMarkersGroupRef.current = pieGroup;
+      const bounds = L.geoJSON(feature).getBounds();
+      if (!bounds.isValid()) return;
 
-    geoJsonData.features.forEach(feature => {
-      const p = feature.properties;
-      if (!p) return;
+      const center = bounds.getCenter();
+      const p = feature.properties || {};
 
-      const values = [
-        p.location_pct || 0,
-        p.famille_pct  || 0,
-        p.coloque_pct  || 0,
-        p.cite_pct     || 0,
+      const dataset = [
+
+        selectedTypes.includes("securisé") ? Number(p.securite_pct || 0) : 0,
+        selectedTypes.includes("securité moyenne") ? Number(p.moyennesec_pct || 0) : 0,
+        selectedTypes.includes("peu securisé") ? Number(p.peusecu_pct || 0) : 0
+
       ];
 
-      const total = values.reduce((a, b) => a + b, 0);
-      if (total <= 0) return;
+      const canvasId = `chart-sec-${p.gid}`;
 
-      let center;
-      try {
-        const temp = L.geoJSON(feature);
-        center = temp.getBounds().getCenter();
-      } catch (e) {
-        console.warn("Centroïde impossible pour un polygone");
-        return;
-      }
+      const div = document.createElement("div");
+      div.innerHTML = `<canvas id="${canvasId}" width="50" height="50"></canvas>`;
 
-      const canvas = document.createElement('canvas');
-      canvas.width = 80;
-      canvas.height = 80;
 
-      new Chart(canvas, {
-        type: 'pie',
-        data: {
-          labels: ['Location', 'Famille', 'Colocation', 'Cité'],
-          datasets: [{
-            data: values,
-            backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0'],
-            borderColor: '#ffffff',
-            borderWidth: 1.5,
-          }]
-        },
-        options: {
-          responsive: false,
-          plugins: {
-            legend: { display: false },
-            tooltip: { enabled: false },
-            datalabels: {
-              color: '#fff',
-              font: { weight: 'bold', size: 10 },
-              formatter: (value) => value > 5 ? value.toFixed(0) + '%' : '', // affiche si > 5%
-              anchor: 'center',
-              align: 'center',
-            }
+      const marker = L.marker(center, {
+
+        icon: L.divIcon({
+          html: div,
+          className: "",
+          iconSize: [70, 70],
+          iconAnchor: [35, 35]
+        })
+
+      }).addTo(group);
+
+
+      /* popup sur camembert */
+
+      const popupContent = `
+        <b>Fokontany :</b> ${p.fokontany || "N/A"}<br/>
+        <b>Total logements :</b> ${p.total1 || 0}<br/><br/>
+
+        <b>Sécurité :</b><br/>
+        Sécurisé : ${(Number(p.securite_pct)||0).toFixed(2)} %<br/>
+        Sécurité moyenne : ${(Number(p.moyennesec_pct)||0).toFixed(2)} %<br/>
+        Peu sécurisé : ${(Number(p.peusecu_pct)||0).toFixed(2)} %
+      `;
+
+      marker.bindPopup(popupContent);
+
+
+      setTimeout(() => {
+
+        const canvas = document.getElementById(canvasId);
+        if (!canvas) return;
+
+        if (chartsRef.current[canvasId]) {
+          chartsRef.current[canvasId].destroy();
+        }
+
+        chartsRef.current[canvasId] = new Chart(canvas, {
+
+          type: "pie",
+
+          data: {
+            labels: ["Sécurisé", "Sécurité moyenne", "Peu sécurisé"],
+            datasets: [{
+              data: dataset,
+              backgroundColor: ["#16a34a", "#facc15", "#dc2626"]
+            }]
           },
-          cutout: '0%', // cercle plein
-        },
-        plugins: [ChartDataLabels],
-      });
 
-      const pieIcon = L.divIcon({
-        html: canvas,
-        className: 'leaflet-pie-chart-icon',
-        iconSize: [80, 80],
-        iconAnchor: [40, 40],
-      });
+          options: {
+            responsive: false,
+            plugins: {
+              legend: { display: false },
+              datalabels: {
+                color: "#fff",
+                font: { size: 10 },
+                formatter: (v) => v > 0 ? Math.round(v) + "%" : ""
+              }
+            }
+          }
 
-      const marker = L.marker(center, { icon: pieIcon });
+        });
 
-      marker.bindPopup(`
-        <b>${p.fokontany || 'Fokontany'}</b><br/>
-        Location: ${p.location_pct?.toFixed(1)||0}%<br/>
-        Famille: ${p.famille_pct?.toFixed(1)||0}%<br/>
-        Colocation: ${p.coloque_pct?.toFixed(1)||0}%<br/>
-        Cité: ${p.cite_pct?.toFixed(1)||0}%
-      `);
+      }, 100);
 
-      pieGroup.addLayer(marker);
     });
 
-    // Zoom sur les données
-    if (geoJsonLayerRef.current) {
-      const bounds = geoJsonLayerRef.current.getBounds();
-      if (bounds.isValid()) {
-        mapRef.current.fitBounds(bounds, { padding: [60, 60] });
-      }
-    }
-  }, [geoJsonData]);
+    pieLayerRef.current = group;
 
-  const getColor = (value) => {
-    return value > 20 ? '#800026' :
-           value > 10 ? '#BD0026' :
-           value > 5  ? '#E31A1C' :
-           value > 2  ? '#FC4E2A' :
-           value > 0  ? '#FD8D3C' :
-                        '#FFEDA0';
-  };
+  }, [data, map, selectedTypes]);
+
+
+  if (!data) return null;
 
   return (
-    <div style={{ height: '100vh', width: '100%', display: 'flex' }}>
-      <Sidebar
-        isOpen={isSidebarOpen}
-        setIsOpen={setIsSidebarOpen}
-        maxTotal={maxTotal}
-        setMaxTotal={setMaxTotal}
-        selectedTypes={selectedTypes}
-        setSelectedTypes={setSelectedTypes}
-      />
-
-      <div style={{ flex: 1, position: 'relative' }}>
-        <div id="map" style={{ height: '100%', width: '100%' }} />
-
-        {loading && (
-          <div style={{
-            position: 'absolute',
-            inset: 0,
-            background: 'rgba(255,255,255,0.8)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 1000,
-            fontSize: '1.5rem',
-          }}>
-            Chargement des données...
-          </div>
-        )}
-
-        {error && (
-          <div style={{
-            position: 'absolute',
-            top: '20px',
-            left: '50%',
-            transform: 'translateX(-50%)',
-            background: 'rgba(220,53,69,0.95)',
-            color: 'white',
-            padding: '12px 24px',
-            borderRadius: '8px',
-            zIndex: 1100,
-          }}>
-            {error}
-          </div>
-        )}
-
-        {/* Légende fixe à droite (correspondant aux couleurs du camembert) */}
-        <div style={{
-          position: 'absolute',
-          top: '80%',
-          right: '20px',
-          transform: 'translateY(-50%)',
-          background: 'rgba(255, 255, 255, 0.95)',
-          padding: '16px',
-          borderRadius: '10px',
-          boxShadow: '0 4px 15px rgba(0,0,0,0.2)',
-          zIndex: 1000,
-          fontSize: '14px',
-          fontFamily: 'Arial, sans-serif',
-          minWidth: '180px',
-        }}>
-          <div style={{ fontWeight: 'bold', marginBottom: '10px', textAlign: 'center' }}>
-            Légende
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <div style={{ width: '20px', height: '20px', backgroundColor: '#FF6384', borderRadius: '4px' }}></div>
-              Location
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <div style={{ width: '20px', height: '20px', backgroundColor: '#36A2EB', borderRadius: '4px' }}></div>
-              Famille
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <div style={{ width: '20px', height: '20px', backgroundColor: '#FFCE56', borderRadius: '4px' }}></div>
-              Colocation
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <div style={{ width: '20px', height: '20px', backgroundColor: '#4BC0C0', borderRadius: '4px' }}></div>
-              Cité universitaire
-            </div>
-          </div>
-        </div>
-
-        <MapControls
-          selectedBasemap={selectedBasemap}
-          onBasemapChange={setSelectedBasemap}
-        />
-      </div>
-    </div>
+    <GeoJSON
+      data={data}
+      style={style}
+      onEachFeature={onEachFeature}
+    />
   );
-};
 
-export default Logement;
+}
+
+
+/* ================= CARTE ================= */
+
+export default function Securite({ selectedTypes }) {
+
+  return (
+
+    <div style={{ height: "100vh", width: "100%" }}>
+
+      <MapContainer
+        center={[-21.452, 47.085]}
+        zoom={13}
+        style={{ height: "100%", width: "100%" }}
+      >
+
+        <LayersControl position="topright">
+
+          <BaseLayer checked name="OpenStreetMap">
+            <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+          </BaseLayer>
+
+          <BaseLayer name="Satellite">
+            <TileLayer url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}" />
+          </BaseLayer>
+
+          <BaseLayer name="Topographic">
+            <TileLayer url="https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png" />
+          </BaseLayer>
+
+          <BaseLayer name="Carto Light">
+            <TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" />
+          </BaseLayer>
+
+        </LayersControl>
+
+        <MapControls />
+
+        <SecuriteLayer selectedTypes={selectedTypes} />
+
+        <Legend />
+
+      </MapContainer>
+
+    </div>
+
+  );
+
+}

@@ -1,71 +1,84 @@
 import { useEffect, useState, useRef } from "react";
-import {
-MapContainer,
-TileLayer,
-GeoJSON,
-LayersControl,
-ScaleControl,
-useMap
-} from "react-leaflet";
-
+import { MapContainer, TileLayer, GeoJSON, LayersControl, useMap } from "react-leaflet";
 import L from "leaflet";
+
+import "leaflet-fullscreen/dist/leaflet.fullscreen.css";
+import "leaflet-fullscreen";
 
 import Chart from "chart.js/auto";
 import ChartDataLabels from "chartjs-plugin-datalabels";
 
 Chart.register(ChartDataLabels);
 
-const API_URL="http://localhost:8000/api/logement";
+const API_URL = "http://localhost:8000/api/toilette";
 
-const {BaseLayer}=LayersControl;
+const { BaseLayer } = LayersControl;
+
+
+/* CONTROLES */
+
+function MapControls(){
+
+const map = useMap();
+const controlsAdded = useRef(false);
+
+useEffect(()=>{
+
+if(controlsAdded.current) return;
+
+L.control.fullscreen({position:"topleft"}).addTo(map);
+
+L.control.scale({
+metric:true,
+imperial:false,
+position:"bottomleft"
+}).addTo(map);
+
+controlsAdded.current=true;
+
+},[map]);
+
+return null;
+
+}
 
 
 
-/* ---------- LAYER ---------- */
+/* COUCHE */
 
-function LogementLayer({selectedTypes}){
+function ToiletteLayer({selectedTypes}){
 
 const map=useMap();
 
 const [data,setData]=useState(null);
 
 const pieLayerRef=useRef(null);
-
 const chartsRef=useRef({});
 
 
+/* DATA */
 
 useEffect(()=>{
 
-if(!selectedTypes || selectedTypes.length===0){
+fetch(API_URL)
+.then(res=>res.json())
+.then(json=>{
 
-setData(null);
-return;
+/* CORRECTION 1 : vérifier GeoJSON */
 
+if(!json || !json.features){
+setData({type:"FeatureCollection",features:[]});
+}else{
+setData(json);
 }
 
-const typesMap={
-location:"location1",
-famille:"famille1",
-colocation:"coloque",
-cite:"cite"
-};
+});
 
-const typesQuery=selectedTypes
-.map(t=>typesMap[t])
-.filter(Boolean)
-.join(",");
-
-fetch(`${API_URL}?types=${typesQuery}`)
-.then(res=>res.json())
-.then(json=>setData(json))
-.catch(err=>console.error(err));
-
-},[selectedTypes]);
+},[]);
 
 
 
-/* ---------- CHOROPLETHE ---------- */
+/* CHOROPLETHE */
 
 const getColor=(d)=>{
 
@@ -83,19 +96,17 @@ const style=(feature)=>{
 const total=Number(feature.properties?.total1||0);
 
 return{
-
 fillColor:getColor(total),
 weight:1,
 color:"white",
 fillOpacity:0.7
-
 };
 
 };
 
 
 
-/* ---------- PIE CHARTS ---------- */
+/* CAMEMBERTS */
 
 useEffect(()=>{
 
@@ -113,48 +124,49 @@ chartsRef.current={};
 
 const group=L.layerGroup().addTo(map);
 
-data.features.forEach(feature=>{
+/* CORRECTION 2 : sécurité features */
+
+(data.features || []).forEach(feature=>{
+
+/* CORRECTION 3 : ignorer géométrie nulle */
+
+if(!feature || !feature.geometry) return;
 
 const p=feature.properties;
 
 const values={
-location:Number(p.location_pct||0),
-famille:Number(p.famille_pct||0),
-colocation:Number(p.coloque_pct||0),
-cite:Number(p.cite_pct||0)
+tradi:Number(p.tradi_pct||0),
+moderne:Number(p.moderne_pct||0),
+commune:Number(p.commune_pct||0)
 };
 
 const labels=[];
 const dataset=[];
 const colors=[];
 
-if(selectedTypes.includes("location")){
-labels.push("Location");
-dataset.push(values.location);
-colors.push("#FF6384");
+if(selectedTypes.includes("tradi")){
+labels.push("Traditionnelle");
+dataset.push(values.tradi);
+colors.push("#facc15");
 }
 
-if(selectedTypes.includes("famille")){
-labels.push("Famille");
-dataset.push(values.famille);
-colors.push("#36A2EB");
+if(selectedTypes.includes("moderne")){
+labels.push("Moderne");
+dataset.push(values.moderne);
+colors.push("#3b82f6");
 }
 
-if(selectedTypes.includes("colocation")){
-labels.push("Colocation");
-dataset.push(values.colocation);
-colors.push("#FFCE56");
-}
-
-if(selectedTypes.includes("cite")){
-labels.push("Cité");
-dataset.push(values.cite);
-colors.push("#4BC0C0");
+if(selectedTypes.includes("commune")){
+labels.push("Commune");
+dataset.push(values.commune);
+colors.push("#22c55e");
 }
 
 const total=dataset.reduce((a,b)=>a+b,0);
 
 if(total===0) return;
+
+/* CORRECTION 4 : centre sécurisé */
 
 const center=L.geoJSON(feature).getBounds().getCenter();
 
@@ -168,8 +180,8 @@ const marker=L.marker(center,{
 icon:L.divIcon({
 html:div,
 className:"",
-iconSize:[80,80],
-iconAnchor:[40,40]
+iconSize:[70,70],
+iconAnchor:[35,35]
 })
 }).addTo(group);
 
@@ -193,9 +205,16 @@ responsive:false,
 plugins:{
 legend:{display:false},
 datalabels:{
-color:"#fff",
-font:{weight:"bold",size:10},
-formatter:(v)=>v>0?v.toFixed(0)+"%":""
+color:"#ffffff",
+font:{
+weight:"bold",
+size:11
+},
+formatter:(value)=>{
+return value>0 ? value.toFixed(0)+"%" : "";
+},
+anchor:"center",
+align:"center"
 }
 }
 }
@@ -217,8 +236,9 @@ pieLayerRef.current=group;
 },[data,selectedTypes,map]);
 
 
+/* CORRECTION 5 */
 
-if(!data) return null;
+if(!data || !data.features) return null;
 
 return <GeoJSON data={data} style={style}/>;
 
@@ -226,11 +246,9 @@ return <GeoJSON data={data} style={style}/>;
 
 
 
-/* ---------- MAP ---------- */
+/* CARTE */
 
-export default function Logement({selectedTypes}){
-
-if(!selectedTypes || selectedTypes.length===0) return null;
+export default function Toilette({selectedTypes}){
 
 return(
 
@@ -242,37 +260,52 @@ zoom={13}
 style={{height:"100%",width:"100%"}}
 >
 
-{/* échelle en km uniquement */}
-
-<ScaleControl position="bottomleft" imperial={false}/>
-
 <LayersControl position="topright">
 
 <BaseLayer checked name="OpenStreetMap">
 <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"/>
 </BaseLayer>
 
-<BaseLayer name="Satellite">
-<TileLayer url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"/>
-</BaseLayer>
-
-<BaseLayer name="Topo">
-<TileLayer url="https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png"/>
-</BaseLayer>
-
-<BaseLayer name="Dark">
-<TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"/>
-</BaseLayer>
-
 </LayersControl>
 
-<LogementLayer selectedTypes={selectedTypes}/>
+<MapControls/>
+
+<ToiletteLayer selectedTypes={selectedTypes}/>
 
 </MapContainer>
 
 
 
-{/* ---------- LEGENDE ---------- */}
+{/* LEGENDE CHOROPLETHE */}
+
+<div
+style={{
+position:"absolute",
+bottom:"120px",
+right:"20px",
+background:"white",
+padding:"10px",
+borderRadius:"6px",
+boxShadow:"0 0 6px rgba(0,0,0,0.3)",
+fontSize:"13px",
+zIndex:1000
+}}
+>
+
+<b>Total étudiants</b>
+
+<div><span style={{background:"#800026",width:"14px",height:"14px",display:"inline-block"}}></span> >10</div>
+<div><span style={{background:"#BD0026",width:"14px",height:"14px",display:"inline-block"}}></span> 5</div>
+<div><span style={{background:"#E31A1C",width:"14px",height:"14px",display:"inline-block"}}></span> 3</div>
+<div><span style={{background:"#FC4E2A",width:"14px",height:"14px",display:"inline-block"}}></span> 2</div>
+<div><span style={{background:"#FD8D3C",width:"14px",height:"14px",display:"inline-block"}}></span> 1</div>
+<div><span style={{background:"#FFEDA0",width:"14px",height:"14px",display:"inline-block"}}></span> 0</div>
+
+</div>
+
+
+
+{/* LEGENDE CAMEMBERT */}
 
 <div
 style={{
@@ -288,23 +321,11 @@ zIndex:1000
 }}
 >
 
-<b>Nombre d'étudiants</b>
+<b>Type de toilette</b>
 
-<div><span style={{background:"#800026",width:"14px",height:"14px",display:"inline-block"}}></span> >10</div>
-<div><span style={{background:"#BD0026",width:"14px",height:"14px",display:"inline-block"}}></span> 5</div>
-<div><span style={{background:"#E31A1C",width:"14px",height:"14px",display:"inline-block"}}></span> 3</div>
-<div><span style={{background:"#FC4E2A",width:"14px",height:"14px",display:"inline-block"}}></span> 2</div>
-<div><span style={{background:"#FD8D3C",width:"14px",height:"14px",display:"inline-block"}}></span> 1</div>
-<div><span style={{background:"#FFEDA0",width:"14px",height:"14px",display:"inline-block"}}></span> 0</div>
-
-<hr/>
-
-<b>Types de logement</b>
-
-<div><span style={{background:"#FF6384",width:"14px",height:"14px",display:"inline-block"}}></span> Location</div>
-<div><span style={{background:"#36A2EB",width:"14px",height:"14px",display:"inline-block"}}></span> Famille</div>
-<div><span style={{background:"#FFCE56",width:"14px",height:"14px",display:"inline-block"}}></span> Colocation</div>
-<div><span style={{background:"#4BC0C0",width:"14px",height:"14px",display:"inline-block"}}></span> Cité</div>
+<div><span style={{background:"#facc15",width:"14px",height:"14px",display:"inline-block"}}></span> Traditionnelle</div>
+<div><span style={{background:"#3b82f6",width:"14px",height:"14px",display:"inline-block"}}></span> Moderne</div>
+<div><span style={{background:"#22c55e",width:"14px",height:"14px",display:"inline-block"}}></span> Commune</div>
 
 </div>
 
